@@ -1,0 +1,395 @@
+{
+    "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {
+        "LogicAppName": {
+            "type": "String"
+        },
+        "senderAddress": {
+            "type": "string"
+        },
+        "emailSuffix": {
+            "type": "string"
+        },
+        "sharedMailBoxAddress": {
+            "type": "string"
+        }
+    },
+    "variables": {
+        "connections_office365_name":"office365",
+        "connections_excelonlinebusiness_name":"excelonlinebusiness"
+    },
+    "resources": [
+
+        //Sharepoint Connector
+        {
+            "type": "Microsoft.Web/connections",
+            "apiVersion": "2016-06-01",
+            "name": "[variables('connections_excelonlinebusiness_name')]",
+            "location": "[resourceGroup().location]",
+            "kind": "V1",
+            "properties": {
+                "displayName": "[parameters('senderAddress')]",
+    
+                "api": {
+                    "name": "[variables('connections_excelonlinebusiness_name')]",
+                    "id": "[subscriptionResourceId('Microsoft.Web/locations/managedApis', resourceGroup().location, variables('connections_excelonlinebusiness_name'))]"
+                }
+                
+            }
+        },
+        // Outlook Connector
+        {
+            "type": "Microsoft.Web/connections",
+            "apiVersion": "2016-06-01",
+            "name": "[variables('connections_office365_name')]",
+            "location": "[resourceGroup().location]",
+            "kind": "V1",
+            "properties": {
+                "displayName": "[parameters('senderAddress')]",
+                "api": {
+                    "name": "[variables('connections_office365_name')]",
+                    "id": "[subscriptionResourceId('Microsoft.Web/locations/managedApis', resourceGroup().location, variables('connections_office365_name'))]"
+                }
+            }
+        },
+        {
+            "type": "Microsoft.Logic/workflows",
+            "apiVersion": "2017-07-01",
+            "name": "[parameters('LogicAppName')]",
+            "location": "centralus",
+            "identity": {
+                "type": "SystemAssigned"
+            },
+            "properties": {
+                "state": "Enabled",
+                "definition": {
+                    "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+                    "contentVersion": "1.0.0.0",
+                    "parameters": {
+                        "$connections": {
+                            "defaultValue": {},
+                            "type": "Object"
+                        },
+                        "emailSuffix": {
+                            "defaultValue": "[parameters('emailSuffix')]",
+                            "type": "String"
+                        }
+                    },
+                    "triggers": {
+                        "Recurrence": {
+                            "recurrence": {
+                                "frequency": "Week",
+                                "interval": 1
+                            },
+                            "evaluatedRecurrence": {
+                                "frequency": "Week",
+                                "interval": 1
+                            },
+                            "type": "Recurrence"
+                        }
+                    },
+                    "actions": {
+                        "For_each_Subscription": {
+                            "foreach": "@body('Parse_JSON_Subscription_list')?['data']",
+                            "actions": {
+                                "Create_CSV_table": {
+                                    "runAfter": {
+                                        "Parse_JSON_recommendations_list": [
+                                            "Succeeded"
+                                        ]
+                                    },
+                                    "type": "Table",
+                                    "inputs": {
+                                        "format": "CSV",
+                                        "from": "@body('Parse_JSON_recommendations_list')?['data']"
+                                    }
+                                },
+                                "For_each_Owner": {
+                                    "foreach": "@body('List_rows_present_in_a_table')?['value']",
+                                    "actions": {
+                                        "Append_subscription_contact_to_emailAddress_variable": {
+                                            "runAfter": {},
+                                            "type": "AppendToStringVariable",
+                                            "inputs": {
+                                                "name": "emailAddress",
+                                                "value": "@concat(items('For_each_Owner')?['Owner'],'@',parameters('emailSuffix'),';')"
+                                            }
+                                        }
+                                    },
+                                    "runAfter": {
+                                        "List_rows_present_in_a_table": [
+                                            "Succeeded"
+                                        ]
+                                    },
+                                    "type": "Foreach"
+                                },
+                                "HTTP_Get_Non_Compliant_Resources_from_Graph": {
+                                    "runAfter": {},
+                                    "type": "Http",
+                                    "inputs": {
+                                        "authentication": {
+                                            "audience": "https://management.azure.com",
+                                            "type": "ManagedServiceIdentity"
+                                        },
+                                        "body": {
+                                            "query": "securityresources| where type =~ 'microsoft.security/assessments'  | where  subscriptionId == '@{items('For_each_Subscription')?['subscriptionId']}' | extend assessmentStatusCode = tostring(properties.status.code) | extend source = tostring(properties.resourceDetails.Source) | where assessmentStatusCode =~ 'unhealthy' and source =~ 'azure'| extend resourceId = tostring(properties.resourceDetails.Id) | extend displayName = tostring(properties.displayName) | extend details = tostring(properties.metadata.description)  | extend severity = tostring(properties.metadata.severity) | extend remediationSteps = tostring(properties.metadata.remediationDescription) | extend initiativeStatus = parse_json(properties.statusPerInitiative) | mv-expand initiativeStatus | extend compliancePolicy = iff(isempty(initiativeStatus.policyInitiativeName), 'Not Available',initiativeStatus.policyInitiativeName) | project Severity=severity,CompliancePolicyName=compliancePolicy,DisplayName=displayName,ComplianceDetails=details,RemediationSteps=remediationSteps,ResourceId=resourceId"
+                                        },
+                                        "method": "POST",
+                                        "uri": "https://management.azure.com/providers/Microsoft.ResourceGraph/resources?api-version=2021-03-01"
+                                    }
+                                },
+                                "List_rows_present_in_a_table": {
+                                    "runAfter": {
+                                        "reset_variable_emailAddress": [
+                                            "Succeeded"
+                                        ]
+                                    },
+                                    "metadata": {
+                                        "015QTX6EICGNJP73KTJ5FLVRVKXO2JUQPV": "/subscrioptioncontacs/Subscription List.xlsx"
+                                    },
+                                    "type": "ApiConnection",
+                                    "inputs": {
+                                        "host": {
+                                            "connection": {
+                                                "name": "@parameters('$connections')['excelonlinebusiness']['connectionId']"
+                                            }
+                                        },
+                                        "method": "get",
+                                        "path": "/drives/@{encodeURIComponent('b!ykMO0YxxKku8O1Ov05QGUzXZEASKNlxErRZLYUytzoZTQ9_BEaRZQIrIW5_qm3_R')}/files/@{encodeURIComponent(encodeURIComponent('015QTX6EICGNJP73KTJ5FLVRVKXO2JUQPV'))}/tables/@{encodeURIComponent('SubscriptionTable')}/items",
+                                        "queries": {
+                                            "$filter": "SubscriptionName eq '@{items('For_each_Subscription')?['name']}'",
+                                            "$select": "Owner",
+                                            "source": "groups/74001d0e-3f8b-4e8f-a8dd-108798afc5b1"
+                                        }
+                                    }
+                                },
+                                "Parse_JSON_recommendations_list": {
+                                    "runAfter": {
+                                        "HTTP_Get_Non_Compliant_Resources_from_Graph": [
+                                            "Succeeded"
+                                        ]
+                                    },
+                                    "type": "ParseJson",
+                                    "inputs": {
+                                        "content": "@body('HTTP_Get_Non_Compliant_Resources_from_Graph')",
+                                        "schema": {
+                                            "properties": {
+                                                "count": {
+                                                    "type": "integer"
+                                                },
+                                                "data": {
+                                                    "items": {
+                                                        "properties": {
+                                                            "ComplianceDetails": {
+                                                                "type": "string"
+                                                            },
+                                                            "CompliancePolicyName": {
+                                                                "type": "string"
+                                                            },
+                                                            "DisplayName": {
+                                                                "type": "string"
+                                                            },
+                                                            "RemediationSteps": {
+                                                                "type": "string"
+                                                            },
+                                                            "ResourceId": {
+                                                                "type": "string"
+                                                            },
+                                                            "Severity": {
+                                                                "type": "string"
+                                                            }
+                                                        },
+                                                        "required": [
+                                                            "Severity",
+                                                            "CompliancePolicyName",
+                                                            "DisplayName",
+                                                            "ComplianceDetails",
+                                                            "RemediationSteps",
+                                                            "ResourceId"
+                                                        ],
+                                                        "type": "object"
+                                                    },
+                                                    "type": "array"
+                                                },
+                                                "facets": {
+                                                    "type": "array"
+                                                },
+                                                "resultTruncated": {
+                                                    "type": "string"
+                                                },
+                                                "totalRecords": {
+                                                    "type": "integer"
+                                                }
+                                            },
+                                            "type": "object"
+                                        }
+                                    }
+                                },
+                                "Send_an_email_from_a_shared_mailbox_(V2)": {
+                                    "runAfter": {
+                                        "For_each_Owner": [
+                                            "Succeeded"
+                                        ]
+                                    },
+                                    "type": "ApiConnection",
+                                    "inputs": {
+                                        "body": {
+                                            "Attachments": [
+                                                {
+                                                    "ContentBytes": "@{base64(body('Create_CSV_table'))}",
+                                                    "Name": "@{items('For_each_Subscription')?['name']}-violations.csv"
+                                                }
+                                            ],
+                                            "Body": "<p>@{variables('emailBody')}</p>",
+                                            "Importance": "Normal",
+                                            "MailboxAddress": "[parameters('sharedMailBoxAddress')]",
+                                            "Subject": "@{items('For_each_Subscription')?['name']} : New Compliance Recommendations Found",
+                                            "To": "@{variables('emailAddress')}"
+                                        },
+                                        "host": {
+                                            "connection": {
+                                                "name": "@parameters('$connections')['office365']['connectionId']"
+                                            }
+                                        },
+                                        "method": "post",
+                                        "path": "/v2/SharedMailbox/Mail"
+                                    }
+                                },
+                                "reset_variable_emailAddress": {
+                                    "runAfter": {
+                                        "Create_CSV_table": [
+                                            "Succeeded"
+                                        ]
+                                    },
+                                    "type": "SetVariable",
+                                    "inputs": {
+                                        "name": "emailAddress",
+                                        "value": "null"
+                                    }
+                                }
+                            },
+                            "runAfter": {
+                                "Parse_JSON_Subscription_list": [
+                                    "Succeeded"
+                                ]
+                            },
+                            "type": "Foreach"
+                        },
+                        "HTTP_Get_Subscription_List": {
+                            "runAfter": {},
+                            "type": "Http",
+                            "inputs": {
+                                "authentication": {
+                                    "audience": "https://management.azure.com",
+                                    "type": "ManagedServiceIdentity"
+                                },
+                                "body": {
+                                    "query": "resourcecontainers|where type == 'microsoft.resources/subscriptions'|project  subscriptionId, name"
+                                },
+                                "method": "POST",
+                                "uri": "https://management.azure.com/providers/Microsoft.ResourceGraph/resources?api-version=2021-03-01"
+                            }
+                        },
+                        "Initialize_variable_emailAddress": {
+                            "runAfter": {
+                                "Initialize_variable_emailBody": [
+                                    "Succeeded"
+                                ]
+                            },
+                            "type": "InitializeVariable",
+                            "inputs": {
+                                "variables": [
+                                    {
+                                        "name": "emailAddress",
+                                        "type": "string"
+                                    }
+                                ]
+                            }
+                        },
+                        "Initialize_variable_emailBody": {
+                            "runAfter": {
+                                "HTTP_Get_Subscription_List": [
+                                    "Succeeded"
+                                ]
+                            },
+                            "type": "InitializeVariable",
+                            "inputs": {
+                                "variables": [
+                                    {
+                                        "name": "emailBody",
+                                        "type": "string",
+                                        "value": "<style type=\"text/css\">\n    tr {\n        text-align: \"center\";\n        border: 1px solid black;\n\n    }\n\th1 {\n\t\tfont-family: \"Segoe UI\";\n\t\tfont-size: 32px;\n\t\tfont-style: normal;\n\t\tfont-variant: normal;\n\t\tfont-weight: 700;\n\t\tline-height: 30px;\n\t}\n\n\th2 {\n\t\tfont-family: \"Segoe UI\";\n\t\tfont-size: 20px;\n\t\tfont-style: normal;\n\t\tfont-variant: normal;\n\t\tfont-weight: 700;\n\t\tline-height: 15px;\n\t}\n\n\th3 {\n\t\tfont-family: \"Segoe UI\";\n\t\tfont-size: 22px;\n\t\tfont-style: normal;\n\t\tfont-variant: normal;\n\t\tfont-weight: 700;\n\t\tline-height: 23.1px;\n\t}\n\n\tp {\n\t\tfont-family: \"Segoe UI\";\n\t\tfont-size: 16px;\n\t\tfont-style: normal;\n\t\tfont-variant: normal;\n\t\tfont-weight: 400;\n\t\tline-height: 20px;\n\t}\n</style>\n<table align=\"center\" cellpadding=\"1\" cellspacing=\"1\" border=\"1\"  style=\"width:800px ; border-collapse: collapse; \">\n\t<tbody>\n\t\t<tr>\n\t\t\t<th style=\"text-align:center; width:735px\" colspan=\"2\">\n\t\t\t\t<table align=\"center\" cellpadding=\"0\" cellspacing=\"0\" style=\"width: 600px;\">\n\t\t\t\t\t<tbody>\n\t\t\t\t\t\t<tr>\n\t\t\t\t\t\t\t<td><img src=\"https://raw.githubusercontent.com/Azure/Azure-Security-Center/master/.github/images/asc.png\" alt=\"\" width=\"125\" height=\"125\" /></td>\n\t\t\t\t\t\t\t<td>\n\t\t\t\t\t\t\t\t<h1 style=\"text-align: left;\">Microsoft Defender for Cloud</h1>\n\t\t\t\t\t\t\t\t<h2 style=\"text-align: left;\">New Regulatory Compliance Assessment recommendations found with your resources</h2>\n\t\t\t\t\t\t\t</td>\n\t\t\t\t\t\t</tr>\n\t\t\t\t\t</tbody>\n\t\t\t\t</table>\n\t\t\t</th>\n\t\t</tr>\n\t\t<tr>\n\t\t\t<td style=\"width:735px;\" colspan=\"2\">\n\t\t\t\t<p style=\"text-align: center;\">You are the owner of resources that have new Regulatory Compliance Assessment \n\t\t\t\t\trecommendations in Microsoft Defender for Cloud.<br />\n\t\t\t\t\tPlease review security recommendations in the atatched file and resolve them as instructed within Microsoft Defender.</p>\n\t\t\t</td>\n\t\t</tr>\n    </tbody></table>\n</td>\n</tr>\n</tbody>\n</table>"
+                                    }
+                                ]
+                            }
+                        },
+                        "Parse_JSON_Subscription_list": {
+                            "runAfter": {
+                                "Initialize_variable_emailAddress": [
+                                    "Succeeded"
+                                ]
+                            },
+                            "type": "ParseJson",
+                            "inputs": {
+                                "content": "@body('HTTP_Get_Subscription_List')",
+                                "schema": {
+                                    "properties": {
+                                        "count": {
+                                            "type": "integer"
+                                        },
+                                        "data": {
+                                            "items": {
+                                                "properties": {
+                                                    "name": {
+                                                        "type": "string"
+                                                    },
+                                                    "subscriptionId": {
+                                                        "type": "string"
+                                                    }
+                                                },
+                                                "required": [
+                                                    "subscriptionId",
+                                                    "name"
+                                                ],
+                                                "type": "object"
+                                            },
+                                            "type": "array"
+                                        },
+                                        "facets": {
+                                            "type": "array"
+                                        },
+                                        "resultTruncated": {
+                                            "type": "string"
+                                        },
+                                        "totalRecords": {
+                                            "type": "integer"
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "outputs": {}
+                },
+                "parameters": {
+                    "$connections": {
+                        "value": {
+                            "excelonlinebusiness": {
+                                "connectionId": "[resourceId('Microsoft.Web/connections', variables('connections_excelonlinebusiness_name'))]",
+                                "connectionName": "excelonlinebusiness",
+                                "id": "[subscriptionResourceId('Microsoft.Web/locations/managedApis', resourceGroup().location, variables('connections_excelonlinebusiness_name'))]"
+                            },
+                            "office365": {
+                                "connectionId": "[resourceId('Microsoft.Web/connections', variables('connections_office365_name'))]",
+                                "connectionName": "office365",
+                                "id": "[subscriptionResourceId('Microsoft.Web/locations/managedApis', resourceGroup().location, variables('connections_office365_name'))]"
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    ]
+}
