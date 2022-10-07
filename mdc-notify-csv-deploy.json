@@ -61,6 +61,10 @@
             "identity": {
                 "type": "SystemAssigned"
             },
+            "dependsOn": [
+                "[resourceId('Microsoft.Web/connections', variables('connections_excelonlinebusiness_name'))]",
+                "[resourceId('Microsoft.Web/connections', variables('connections_office365_name'))]"
+            ],
             "properties": {
                 "state": "Enabled",
                 "definition": {
