@@ -5,7 +5,7 @@
         "LogicAppName": {
             "type": "String"
         },
-        "senderAddress": {
+        "connectionDisplayName": {
             "type": "string"
         },
         "emailSuffix": {
@@ -18,6 +18,8 @@
     "variables": {
         "connections_office365_name":"office365",
         "connections_excelonlinebusiness_name":"excelonlinebusiness"
+        
+
     },
     "resources": [
 
@@ -29,7 +31,7 @@
             "location": "[resourceGroup().location]",
             "kind": "V1",
             "properties": {
-                "displayName": "[parameters('senderAddress')]",
+                "displayName": "[parameters('connectionDisplayName')]",
     
                 "api": {
                     "name": "[variables('connections_excelonlinebusiness_name')]",
@@ -46,7 +48,7 @@
             "location": "[resourceGroup().location]",
             "kind": "V1",
             "properties": {
-                "displayName": "[parameters('senderAddress')]",
+                "displayName": "[parameters('connectionDisplayName')]",
                 "api": {
                     "name": "[variables('connections_office365_name')]",
                     "id": "[subscriptionResourceId('Microsoft.Web/locations/managedApis', resourceGroup().location, variables('connections_office365_name'))]"
@@ -157,6 +159,7 @@
                                         "host": {
                                             "connection": {
                                                 "name": "@parameters('$connections')['excelonlinebusiness']['connectionId']"
+                                                
                                             }
                                         },
                                         "method": "get",
@@ -253,7 +256,7 @@
                                         },
                                         "host": {
                                             "connection": {
-                                                "name": "@parameters('$connections')['office365-5']['connectionId']"
+                                                "name": "@parameters('$connections')['office365']['connectionId']"
                                             }
                                         },
                                         "method": "post",
@@ -380,12 +383,12 @@
                 "parameters": {
                     "$connections": {
                         "value": {
-                            "excelonlinebusiness": {
+                            "[variables('connections_excelonlinebusiness_name')]": {
                                 "connectionId": "[resourceId('Microsoft.Web/connections', variables('connections_excelonlinebusiness_name'))]",
-                                "connectionName": "excelonlinebusiness",
+                                "connectionName": "[variables('connections_excelonlinebusiness_name')]",
                                 "id": "[subscriptionResourceId('Microsoft.Web/locations/managedApis', resourceGroup().location, variables('connections_excelonlinebusiness_name'))]"
                             },
-                            "office365": {
+                            "[variables('connections_office365_name')]": {
                                 "connectionId": "[resourceId('Microsoft.Web/connections', variables('connections_office365_name'))]",
                                 "connectionName": "office365",
                                 "id": "[subscriptionResourceId('Microsoft.Web/locations/managedApis', resourceGroup().location, variables('connections_office365_name'))]"
