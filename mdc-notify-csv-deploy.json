@@ -244,7 +244,7 @@
                                         "body": {
                                             "Attachments": [
                                                 {
-                                                    "ContentBytes": "@{base64(body('Create_CSV_table'))}",
+                                                    "ContentBytes": "@{base64(body('Create_CSV_table_Recomendations_List'))}",
                                                     "Name": "@{items('For_each_Subscription')?['name']}-violations.csv"
                                                 }
                                             ],
