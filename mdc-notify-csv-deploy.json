@@ -99,7 +99,7 @@
                         "For_each_Subscription": {
                             "foreach": "@body('Parse_JSON_Subscription_list')?['data']",
                             "actions": {
-                                "Create_CSV_table": {
+                                "Create_CSV_table_Recomendations_List": {
                                     "runAfter": {
                                         "Parse_JSON_recommendations_list": [
                                             "Succeeded"
@@ -147,7 +147,7 @@
                                 },
                                 "List_rows_present_in_a_table": {
                                     "runAfter": {
-                                        "reset_variable_emailAddress": [
+                                        "Reset_variable_emailAddress": [
                                             "Succeeded"
                                         ]
                                     },
@@ -263,9 +263,9 @@
                                         "path": "/v2/SharedMailbox/Mail"
                                     }
                                 },
-                                "reset_variable_emailAddress": {
+                                "Reset_variable_emailAddress": {
                                     "runAfter": {
-                                        "Create_CSV_table": [
+                                        "Create_CSV_table_Recomendations_List": [
                                             "Succeeded"
                                         ]
                                     },
