@@ -272,7 +272,7 @@
                                     "type": "SetVariable",
                                     "inputs": {
                                         "name": "emailAddress",
-                                        "value": "null"
+                                        "value": "@{trim(' ')}"
                                     }
                                 }
                             },
@@ -281,7 +281,12 @@
                                     "Succeeded"
                                 ]
                             },
-                            "type": "Foreach"
+                            "type": "Foreach",
+                            "runtimeConfiguration": {
+                                "concurrency": {
+                                    "repetitions": 1
+                                }
+                            }
                         },
                         "HTTP_Get_Subscription_List": {
                             "runAfter": {},
