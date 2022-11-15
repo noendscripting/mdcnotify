@@ -131,7 +131,11 @@
                                     "type": "Foreach"
                                 },
                                 "HTTP_Get_Non_Compliant_Resources_from_Graph": {
-                                    "runAfter": {},
+                                    "runAfter": {
+                                        "Set_variable_recomendationsQuery":[
+                                            "Succeeded"
+                                        ]
+                                    },
                                     "type": "Http",
                                     "inputs": {
                                         "authentication": {
@@ -139,7 +143,7 @@
                                             "type": "ManagedServiceIdentity"
                                         },
                                         "body": {
-                                            "query": "securityresources| where type =~ 'microsoft.security/assessments'  | where  subscriptionId == '@{items('For_each_Subscription')?['subscriptionId']}' | extend assessmentStatusCode = tostring(properties.status.code) | extend source = tostring(properties.resourceDetails.Source) | where assessmentStatusCode =~ 'unhealthy' and source =~ 'azure'| extend resourceId = tostring(properties.resourceDetails.Id) | extend displayName = tostring(properties.displayName) | extend details = tostring(properties.metadata.description)  | extend severity = tostring(properties.metadata.severity) | extend remediationSteps = tostring(properties.metadata.remediationDescription) | extend initiativeStatus = parse_json(properties.statusPerInitiative) | mv-expand initiativeStatus | extend compliancePolicy = iff(isempty(initiativeStatus.policyInitiativeName), 'Not Available',initiativeStatus.policyInitiativeName) | project Severity=severity,CompliancePolicyName=compliancePolicy,DisplayName=displayName,ComplianceDetails=details,RemediationSteps=remediationSteps,ResourceId=resourceId"
+                                            "query": "@{variables('recomendationsQuery')}"
                                         },
                                         "method": "POST",
                                         "uri": "https://management.azure.com/providers/Microsoft.ResourceGraph/resources?api-version=2021-03-01"
@@ -274,7 +278,15 @@
                                         "name": "emailAddress",
                                         "value": "@{trim(' ')}"
                                     }
-                                }
+                                },
+                                "Set_variable_recomendationsQuery": {
+                        "inputs": {
+                            "name": "recomendationsQuery",
+                            "value": "securityresources| where type =~ 'microsoft.security/assessments' and name !in~ (@{join(variables('exclusionLIst'),',')})| where  subscriptionId == '@{items('For_each_Subscription')?['subscriptionId']}' | extend assessmentStatusCode = tostring(properties.status.code) | extend source = tostring(properties.resourceDetails.Source) | where assessmentStatusCode =~ 'unhealthy' and source =~ 'azure'| extend resourceId = tostring(properties.resourceDetails.Id) | extend displayName = tostring(properties.displayName) | extend details = tostring(properties.metadata.description)  | extend severity = tostring(properties.metadata.severity) | extend remediationSteps = tostring(properties.metadata.remediationDescription) | extend initiativeStatus = parse_json(properties.statusPerInitiative) | mv-expand initiativeStatus | extend compliancePolicy = iff(isempty(initiativeStatus.policyInitiativeName), 'Not Available',initiativeStatus.policyInitiativeName) | project Severity=severity,CompliancePolicyName=compliancePolicy,DisplayName=displayName,ComplianceDetails=details,RemediationSteps=remediationSteps,ResourceId=resourceId"
+                        },
+                        "runAfter": {},
+                        "type": "SetVariable"
+                    }
                             },
                             "runAfter": {
                                 "Parse_JSON_Subscription_list": [
@@ -336,9 +348,74 @@
                                 ]
                             }
                         },
+                        "Initialize_variable_exclusionList": {
+                "inputs": {
+                    "variables": [
+                        {
+                            "name": "exclusionLIst",
+                            "type": "array",
+                            "value": [
+                                "'256927c6-fa8c-79a2-6b8c-6e45e828bf3a'",
+                                "'00c6d40b-e990-6acf-d4f3-471e747a27c4'",
+                                "'e52064aa-6853-e252-a11e-dffc675689c2'",
+                                "'383cf3bc-fdf9-4a02-120a-3e7e36c6bfee'",
+                                "'4fb67663-9ab9-475d-b026-8c544cced439'",
+                                "'21300918-b2e3-0346-785f-c77ff57d243b'",
+                                "'83f577bd-a1b6-b7e1-0891-12ca19d1e6df'",
+                                "'45cfe080-ceb1-a91e-9743-71551ed24e94'",
+                                "'d1db3318-01ff-16de-29eb-28b344515626'",
+                                "'94290b00-4d0c-d7b4-7cea-064a9554e681'",
+                                "'151e82c5-5341-a74b-1eb0-bc38d2c84bb5'",
+                                "'57e98606-6b1e-6193-0e3d-fe621387c16b'",
+                                "'0876ef51-fee7-449d-ba1e-f2662c7e43c6'",
+                                "'58d72d9d-0310-4792-9a3b-6dd111093cdb'",
+                                "'e599a9fe-30e3-47c6-a173-8b4b6d9d3255'",
+                                "'aae10e53-8403-3576-5d97-3b00f97332b2'",
+                                "'b1af52e4-e968-4e2b-b6d0-6736c9651f0a'",
+                                "'b6a28450-dd5d-4ba4-8806-245e20ef6632'",
+                                "'f0fb2a7e-16d5-849f-be57-86db712e9bd0'",
+                                "'56a6e81f-7413-4f72-9a1b-aaeeaa87c872'",
+                                "'1ce68079-b783-4404-b341-d2851d6f0fa2'",
+                                "'e9c320f1-03a0-4d2b-9a37-84b3bdc2e281'",
+                                "'6ac66a74-761f-4a59-928a-d373eea3f028'",
+                                "'400a6682-992c-4726-9549-629fbc3b988f'",
+                                "'1be22853-8ed1-4005-9907-ddad64cb1417'",
+                                "'77758c9d-8a56-5f54-6ff7-69a762ca6004'",
+                                "'bd91-aaf1-7f14-b6e4-866de2f43146'",
+                                "'4ab6e3c5-74dd-8b35-9ab9-f61b30875b27'",
+                                "'2c79b4af-f830-b61e-92b9-63dfa30f16e4'",
+                                "'1ff0b4c9-ed56-4de6-be9c-d7ab39645926'",
+                                "'fde1c0c9-0fd2-4ecc-87b5-98956cbc1095'"
+                            ]
+                        }
+                    ]
+                },
+                "runAfter": {
+                    "Initialize_variable_recommendations_Query": [
+                        "Succeeded"
+                    ]
+                },
+                "type": "InitializeVariable"
+            },
+            "Initialize_variable_recommendations_Query": {
+                "inputs": {
+                    "variables": [
+                        {
+                            "name": "recomendationsQuery",
+                            "type": "string"
+                        }
+                    ]
+                },
+                "runAfter": {
+                                "Initialize_variable_emailAddress": [
+                                    "Succeeded"
+                                ]
+                            },
+                "type": "InitializeVariable"
+            },
                         "Parse_JSON_Subscription_list": {
                             "runAfter": {
-                                "Initialize_variable_emailAddress": [
+                                "Initialize_variable_exclusionList": [
                                     "Succeeded"
                                 ]
                             },
